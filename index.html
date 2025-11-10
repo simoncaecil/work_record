@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>조교 업무 일지</title>
 <style>
-  /* ===== THEME TOKENS ===== */
   :root[data-theme="light"]{
     --bg:#f6f7fb; --card:#ffffff; --muted:#64748b; --text:#0f172a; --accent:#2563eb;
     --line:#e5e7eb; --good:#10b981; --warn:#f59e0b;
@@ -18,7 +17,6 @@
     --input:#0f1117; --input-border:#222532; --row:#0f1117; --row-border:#222532;
     --btn:#151823; --btn-border:#2a2f3a; --btn-text:#e6e9ef;
   }
-
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Pretendard,Apple SD Gothic Neo,"Noto Sans KR",sans-serif}
   header{padding:18px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);backdrop-filter:saturate(180%) blur(4px);z-index:2}
@@ -79,7 +77,7 @@
   <div style="display:flex;gap:10px;align-items:center;justify-content:space-between">
     <div>
       <h1>조교 업무 일지</h1>
-      <div class="kicker">입력은 즉시 저장 · 브라우저(LocalStorage) · GitHub Pages 게시 가능</div>
+      <div class="kicker">Google Sheets 연동 · 여러 사용자 공동 사용</div>
     </div>
     <button id="themeBtn" class="btn" title="다크/라이트 전환">🌞 라이트</button>
   </div>
@@ -118,7 +116,7 @@
       </div>
     </div>
     <div class="hr"></div>
-    <div class="small muted">※ 내용에 관련 인원/업무 성격을 자유롭게 적으면 됩니다(별도 분류 필드 없음). 기한은 반드시 위에서 선택해 주세요.</div>
+    <div class="small muted">※ 내용에 관련 인원/업무 성격은 자유롭게. 기한은 위에서 선택.</div>
   </section>
 
   <!-- 목록 컨트롤 -->
@@ -142,10 +140,7 @@
         </select>
       </div>
       <div class="row right">
-        <button id="exportBtn" class="btn">내보내기(JSON)</button>
-        <label class="btn" for="importFile" style="cursor:pointer">가져오기(JSON)</label>
-        <input id="importFile" type="file" accept="application/json" style="display:none">
-        <button id="clearBtn" class="btn warn">전체 초기화</button>
+        <button id="refreshBtn" class="btn">새로고침</button>
       </div>
     </div>
   </section>
@@ -182,27 +177,21 @@
 
 <script>
 (function(){
-  const LS_KEY = "assistant_tasklog_v1";
-  const THEME_KEY = "assistant_tasklog_theme";
+  // ★★★ 여기 웹앱 URL 붙여넣기 ★★★
+  const API = 'PASTE_YOUR_WEB_APP_URL';
+
   const tz = "Asia/Seoul";
   const $ = sel => document.querySelector(sel);
   const $$ = sel => document.querySelectorAll(sel);
 
-  const state = {
-    tasks: [],
-    page: 1,
-    pageSize: 10,
-    sortMode: "NEW_FIRST",
-    statusFilter: "ALL",
-    nextId: 1,
-  };
+  const state = { tasks: [], page:1, pageSize:10, sortMode:'NEW_FIRST', statusFilter:'ALL' };
 
-  // ===== THEME =====
+  // ==== THEME ====
+  const THEME_KEY = "assistant_tasklog_theme";
   function applyTheme(theme){
     document.documentElement.setAttribute("data-theme", theme);
     const btn = $("#themeBtn");
-    if(theme==="dark"){ btn.textContent = "🌙 다크"; }
-    else { btn.textContent = "🌞 라이트"; }
+    btn.textContent = theme==="dark" ? "🌙 다크" : "🌞 라이트";
     localStorage.setItem(THEME_KEY, theme);
   }
   function toggleTheme(){
@@ -210,14 +199,12 @@
     applyTheme(cur==="light" ? "dark" : "light");
   }
   function initTheme(){
-    const saved = localStorage.getItem(THEME_KEY);
-    applyTheme(saved || "light");
+    applyTheme(localStorage.getItem(THEME_KEY) || "light");
     $("#themeBtn").addEventListener("click", toggleTheme);
   }
 
-  // ===== Utils =====
+  // ==== Utils ====
   const pad = n => String(n).padStart(2,"0");
-  function nowISO(){ return new Date().toISOString(); }
   function fmtKST(iso){
     try{
       return new Date(iso).toLocaleString("ko-KR",{ timeZone: tz, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
@@ -237,38 +224,41 @@
     }
     return "";
   }
-  function save(){
-    localStorage.setItem(LS_KEY, JSON.stringify({
-      tasks: state.tasks,
-      nextId: state.nextId
-    }));
-  }
-  function load(){
-    const raw = localStorage.getItem(LS_KEY);
-    if(!raw) return;
-    try{
-      const obj = JSON.parse(raw);
-      state.tasks = Array.isArray(obj.tasks)? obj.tasks : [];
-      state.nextId = Number.isInteger(obj.nextId)? obj.nextId : (state.tasks.reduce((m,t)=>Math.max(m,t.id),0)+1);
-    }catch(e){}
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[m]));
   }
 
-  // ===== Rendering =====
+  // ==== API ====
+  async function apiList(){
+    const r = await fetch(API + '?op=list', { method:'GET' });
+    const j = await r.json();
+    if(!j.ok) throw new Error('list failed');
+    return j.tasks;
+  }
+  async function apiAdd(payload){
+    // preflight 피하려고 text/plain
+    const r = await fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({op:'add', ...payload}) });
+    const j = await r.json();
+    if(!j.ok) throw new Error('add failed');
+    return j.taskId;
+  }
+  async function apiUpdate(payload){
+    const r = await fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({op:'update', ...payload}) });
+    const j = await r.json();
+    if(!j.ok) throw new Error('update failed');
+  }
+
+  // ==== State/Render ====
   function isComplete(t){ return !!t.authorDone && !!t.managerChecked; }
 
   function getSortedFiltered(){
     let arr = state.tasks.slice();
-
-    // Filter
     if(state.statusFilter==="OPEN") arr = arr.filter(t=>!isComplete(t));
     if(state.statusFilter==="DONE") arr = arr.filter(t=>isComplete(t));
 
-    // Sort
-    if(state.sortMode==="NEW_FIRST"){
-      arr.sort((a,b)=>b.id - a.id);
-    }else if(state.sortMode==="OLD_FIRST"){
-      arr.sort((a,b)=>a.id - b.id);
-    }else if(state.sortMode==="INCOMPLETE_FIRST"){
+    if(state.sortMode==="NEW_FIRST"){ arr.sort((a,b)=>b.id - a.id); }
+    else if(state.sortMode==="OLD_FIRST"){ arr.sort((a,b)=>a.id - b.id); }
+    else if(state.sortMode==="INCOMPLETE_FIRST"){
       const A = arr.filter(t=>!isComplete(t)).sort((a,b)=>a.id - b.id);
       const B = arr.filter(t=>isComplete(t)).sort((a,b)=>a.id - b.id);
       arr = A.concat(B);
@@ -283,7 +273,6 @@
   function render(){
     const tbody = $("#tbody");
     tbody.innerHTML = "";
-
     const arr = getSortedFiltered();
     const totalPages = Math.max(1, Math.ceil(arr.length / state.pageSize));
     if(state.page > totalPages) state.page = totalPages;
@@ -344,21 +333,14 @@
     mkBtn("마지막 »", state.page===totalPages, ()=>{ state.page=totalPages; render(); });
   }
 
-  function escapeHtml(s){
-    return String(s).replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[m]));
-  }
-
-  // ===== Events =====
-  // deadline radio toggle
+  // ==== Events ====
   $$('input[name="ddl"]').forEach(r=>{
     r.addEventListener("change", ()=>{
-      const dt = $("#deadlineAt");
-      dt.disabled = (r.value!=="DATETIME");
+      $("#deadlineAt").disabled = (r.value!=="DATETIME");
     });
   });
 
-  // add task
-  $("#addBtn").addEventListener("click", ()=>{
+  $("#addBtn").addEventListener("click", async ()=>{
     const author = $("#author").value.trim();
     const content = $("#content").value.trim();
     const ddl = [...$$('input[name="ddl"]')].find(x=>x.checked)?.value || "ASAP";
@@ -368,100 +350,55 @@
     if(!content){ alert("업무 내용을 입력하세요."); return; }
     if(ddl==="DATETIME" && !dtInput.value){ alert("기한 일시를 선택하세요."); return; }
 
-    const task = {
-      id: state.nextId++,
-      createdAt: new Date().toISOString(),
-      author, content,
-      deadlineType: ddl,
-      deadlineAt: ddl==="DATETIME" ? new Date(dtInput.value).toISOString() : null,
-      authorDone: false,
-      authorDoneAt: null,
-      managerChecked: false,
-      managerCheckedAt: null
-    };
-    state.tasks.push(task);
-    save();
-
-    $("#content").value = "";
-    $$('input[name="ddl"]').forEach(x=>{ x.checked = (x.value==="ASAP"); });
-    dtInput.value = ""; dtInput.disabled = true;
-
-    state.page = 1;
-    render();
-  });
-
-  // checkbox updates
-  $("#tbody").addEventListener("change", (e)=>{
-    const t = e.target;
-    if(t.matches('input[type="checkbox"][data-id]')){
-      const id = Number(t.getAttribute("data-id"));
-      const act = t.getAttribute("data-act");
-      const item = state.tasks.find(x=>x.id===id);
-      if(!item) return;
-      if(act==="authorDone"){
-        item.authorDone = t.checked;
-        item.authorDoneAt = t.checked ? nowISO() : null;
-      }else if(act==="managerChecked"){
-        item.managerChecked = t.checked;
-        item.managerCheckedAt = t.checked ? nowISO() : null;
-      }
-      save();
-      render();
+    try{
+      await apiAdd({
+        author, content,
+        deadlineType: ddl,
+        deadlineAt: ddl==="DATETIME" ? new Date(dtInput.value).toISOString() : ''
+      });
+      $("#content").value = "";
+      $$('input[name="ddl"]').forEach(x=>{ x.checked = (x.value==="ASAP"); });
+      dtInput.value = ""; dtInput.disabled = true;
+      await refresh(); // 최신 목록 재조회
+    }catch(err){
+      alert("저장 중 오류: " + err.message);
     }
   });
 
-  // sort & filter
+  $("#tbody").addEventListener("change", async (e)=>{
+    const t = e.target;
+    if(!t.matches('input[type="checkbox"][data-id]')) return;
+    const id = Number(t.getAttribute("data-id"));
+    const act = t.getAttribute("data-act");
+    try{
+      if(act==="authorDone"){
+        await apiUpdate({ id, authorDone: t.checked });
+      }else if(act==="managerChecked"){
+        await apiUpdate({ id, managerChecked: t.checked });
+      }
+      await refresh();
+    }catch(err){
+      alert("업데이트 중 오류: " + err.message);
+    }
+  });
+
   $("#sortMode").addEventListener("change", (e)=>{ state.sortMode = e.target.value; state.page=1; render(); });
   $("#statusFilter").addEventListener("change", (e)=>{ state.statusFilter = e.target.value; state.page=1; render(); });
   $("#incompleteFirst").addEventListener("click", ()=>{ $("#sortMode").value="INCOMPLETE_FIRST"; state.sortMode="INCOMPLETE_FIRST"; state.page=1; render(); });
   $("#completeFirst").addEventListener("click", ()=>{ $("#sortMode").value="COMPLETE_FIRST"; state.sortMode="COMPLETE_FIRST"; state.page=1; render(); });
   $("#resetSort").addEventListener("click", ()=>{ $("#sortMode").value="NEW_FIRST"; state.sortMode="NEW_FIRST"; state.statusFilter="ALL"; $("#statusFilter").value="ALL"; state.page=1; render(); });
+  $("#refreshBtn").addEventListener("click", refresh);
 
-  // export / import / clear
-  $("#exportBtn").addEventListener("click", ()=>{
-    const blob = new Blob([JSON.stringify({tasks:state.tasks, nextId:state.nextId}, null, 2)], {type:"application/json"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `assistant_tasklog_${Date.now()}.json`;
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  });
-  $("#importFile").addEventListener("change", (e)=>{
-    const file = e.target.files?.[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = ()=> {
-      try{
-        const obj = JSON.parse(reader.result);
-        if(!Array.isArray(obj.tasks)) throw new Error("형식 오류");
-        state.tasks = obj.tasks;
-        state.nextId = Number.isInteger(obj.nextId)? obj.nextId : (state.tasks.reduce((m,t)=>Math.max(m,t.id),0)+1);
-        save();
-        state.page = 1;
-        render();
-        alert("가져오기가 완료되었습니다.");
-      }catch(err){
-        alert("JSON 형식이 올바르지 않습니다.");
-      }
-    };
-    reader.readAsText(file, "utf-8");
-    e.target.value = "";
-  });
-  $("#clearBtn").addEventListener("click", ()=>{
-    if(confirm("전체 데이터를 초기화할까요? 이 작업은 되돌릴 수 없습니다.")){
-      state.tasks = [];
-      state.nextId = 1;
-      save();
-      state.page = 1;
-      render();
-    }
-  });
+  async function refresh(){
+    const tasks = await apiList();
+    state.tasks = tasks;
+    state.page = 1;
+    render();
+  }
 
-  // ===== init =====
+  // ==== init ====
   initTheme();
-  load();
-  $("#sortMode").value = state.sortMode;
-  $("#statusFilter").value = state.statusFilter;
-  render();
+  refresh();
 })();
 </script>
 </body>
