@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>조교 업무 일지</title>
+<style>
+  /* ===== THEME TOKENS ===== */
+  :root[data-theme="light"]{
+    --bg:#f6f7fb; --card:#ffffff; --muted:#64748b; --text:#0f172a; --accent:#2563eb;
+    --line:#e5e7eb; --good:#10b981; --warn:#f59e0b;
+    --input:#ffffff; --input-border:#d1d5db; --row:#ffffff; --row-border:#e5e7eb;
+    --btn:#f8fafc; --btn-border:#d1d5db; --btn-text:#0f172a;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b0c10; --card:#121318; --muted:#9aa3af; --text:#e5e7eb; --accent:#60a5fa;
+    --line:#22252e; --good:#34d399; --warn:#fbbf24;
+    --input:#0f1117; --input-border:#222532; --row:#0f1117; --row-border:#222532;
+    --btn:#151823; --btn-border:#2a2f3a; --btn-text:#e6e9ef;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Pretendard,Apple SD Gothic Neo,"Noto Sans KR",sans-serif}
+  header{padding:18px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);backdrop-filter:saturate(180%) blur(4px);z-index:2}
+  h1{margin:0;font-size:20px;letter-spacing:.3px}
+  .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
+  .grid{display:grid;gap:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  label{font-size:13px;color:var(--muted)}
+  input[type="text"], textarea, select, input[type="datetime-local"]{
+    background:var(--input);border:1px solid var(--input-border);color:var(--text);
+    padding:10px 12px;border-radius:10px;outline:none;min-width:0
+  }
+  textarea{width:100%;min-height:90px;resize:vertical}
+  input[type="text"]{width:220px}
+  .btn{
+    border:1px solid var(--btn-border);background:var(--btn);color:var(--btn-text);
+    border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer
+  }
+  .btn:hover{filter:brightness(0.98)}
+  .btn.primary{background:var(--btn);border-color:#cbd5e1}
+  .btn.accent{background:color-mix(in srgb,var(--accent) 12%, var(--btn));border-color:color-mix(in srgb,var(--accent) 35%, var(--btn-border));color:color-mix(in srgb,var(--accent) 90%, #ffffff)}
+  .btn.good{background:color-mix(in srgb,var(--good) 12%, var(--btn));border-color:color-mix(in srgb,var(--good) 35%, var(--btn-border))}
+  .btn.warn{background:color-mix(in srgb,var(--warn) 12%, var(--btn));border-color:color-mix(in srgb,var(--warn) 35%, var(--btn-border))}
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--btn-border);font-size:12px}
+  .badge.asap{border-color:var(--accent);color:color-mix(in srgb,var(--accent) 70%, var(--text))}
+  .badge.today{border-color:var(--warn);color:color-mix(in srgb,var(--warn) 70%, var(--text))}
+  .badge.dt{border-color:var(--good);color:color-mix(in srgb,var(--good) 70%, var(--text))}
+  .controls .row{align-items:flex-end}
+  .controls select{height:40px}
+  table{width:100%;border-collapse:separate;border-spacing:0 10px}
+  thead th{font-size:12px;color:var(--muted);font-weight:600;text-align:left;padding:0 10px}
+  tbody tr{background:var(--row);border:1px solid var(--row-border)}
+  tbody tr td{padding:12px 10px;vertical-align:top}
+  tbody tr{border-radius:12px;overflow:hidden}
+  tbody tr td:first-child{border-top-left-radius:12px;border-bottom-left-radius:12px}
+  tbody tr td:last-child{border-top-right-radius:12px;border-bottom-right-radius:12px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .muted{color:var(--muted)}
+  .nowrap{white-space:nowrap}
+  .content{white-space:pre-wrap;line-height:1.35}
+  .tcenter{text-align:center}
+  .pagination{display:flex;justify-content:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .pagination button{min-width:40px}
+  .kicker{font-size:12px;color:var(--muted)}
+  .hr{height:1px;background:var(--line);margin:10px 0}
+  .small{font-size:12px}
+  .sticky-tools{position:sticky;bottom:14px;display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+  .right{margin-left:auto}
+  @media (max-width:860px){
+    .hide-sm{display:none}
+    input[type="text"]{width:100%}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div style="display:flex;gap:10px;align-items:center;justify-content:space-between">
+    <div>
+      <h1>조교 업무 일지</h1>
+      <div class="kicker">입력은 즉시 저장 · 브라우저(LocalStorage) · GitHub Pages 게시 가능</div>
+    </div>
+    <button id="themeBtn" class="btn" title="다크/라이트 전환">🌞 라이트</button>
+  </div>
+</header>
+
+<div class="wrap grid">
+
+  <!-- 입력 카드 -->
+  <section class="card">
+    <div class="row">
+      <div style="flex:1 1 240px">
+        <label>작성자</label><br/>
+        <input id="author" type="text" placeholder="예: 민과장 / 김조교" />
+      </div>
+      <div style="flex:3 1 480px">
+        <label>업무 내용</label><br/>
+        <textarea id="content" placeholder="예: 5학년 vocabulary 시험지 인쇄 및 분반별 배부 / 관련: 5A, 5B (ASAP)"></textarea>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:8px">
+      <div>
+        <label>기한 선택</label><br/>
+        <div class="row small">
+          <label><input type="radio" name="ddl" value="ASAP" checked> ASAP</label>
+          <label><input type="radio" name="ddl" value="TODAY"> 당일</label>
+          <label><input type="radio" name="ddl" value="DATETIME"> 일시 지정</label>
+        </div>
+      </div>
+      <div>
+        <label class="hide-sm"> </label><br/>
+        <input id="deadlineAt" type="datetime-local" disabled>
+      </div>
+      <div class="right" style="align-self:flex-end">
+        <button id="addBtn" class="btn accent">업무 등록</button>
+      </div>
+    </div>
+    <div class="hr"></div>
+    <div class="small muted">※ 내용에 관련 인원/업무 성격을 자유롭게 적으면 됩니다(별도 분류 필드 없음). 기한은 반드시 위에서 선택해 주세요.</div>
+  </section>
+
+  <!-- 목록 컨트롤 -->
+  <section class="card controls">
+    <div class="row">
+      <div>
+        <label>정렬</label><br/>
+        <select id="sortMode">
+          <option value="NEW_FIRST">입력순 (최신 → 오래된)</option>
+          <option value="OLD_FIRST">입력순 (오래된 → 최신)</option>
+          <option value="INCOMPLETE_FIRST">상태 정렬: 미완료 먼저</option>
+          <option value="COMPLETE_FIRST">상태 정렬: 완료 먼저</option>
+        </select>
+      </div>
+      <div>
+        <label>상태 빠른 필터</label><br/>
+        <select id="statusFilter">
+          <option value="ALL">전체</option>
+          <option value="OPEN">미완료(체크 미충족)</option>
+          <option value="DONE">완료(작성자+과장 체크)</option>
+        </select>
+      </div>
+      <div class="row right">
+        <button id="exportBtn" class="btn">내보내기(JSON)</button>
+        <label class="btn" for="importFile" style="cursor:pointer">가져오기(JSON)</label>
+        <input id="importFile" type="file" accept="application/json" style="display:none">
+        <button id="clearBtn" class="btn warn">전체 초기화</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 목록 표 -->
+  <section class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="small muted">페이지당 10개 표시</div>
+      <div class="small muted">완료 기준: <b>작성자 완료</b> + <b>과장 체크</b> 모두 체크</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="hide-sm">#</th>
+          <th>입력시각</th>
+          <th>작성자</th>
+          <th>업무 내용</th>
+          <th>기한</th>
+          <th class="tcenter">작성자 완료</th>
+          <th class="tcenter">과장 체크</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="pagination" id="pager"></div>
+    <div class="sticky-tools">
+      <button id="incompleteFirst" class="btn primary">미완료 먼저</button>
+      <button id="completeFirst" class="btn good">완료 먼저</button>
+      <button id="resetSort" class="btn">입력순</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  const LS_KEY = "assistant_tasklog_v1";
+  const THEME_KEY = "assistant_tasklog_theme";
+  const tz = "Asia/Seoul";
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => document.querySelectorAll(sel);
+
+  const state = {
+    tasks: [],
+    page: 1,
+    pageSize: 10,
+    sortMode: "NEW_FIRST",
+    statusFilter: "ALL",
+    nextId: 1,
+  };
+
+  // ===== THEME =====
+  function applyTheme(theme){
+    document.documentElement.setAttribute("data-theme", theme);
+    const btn = $("#themeBtn");
+    if(theme==="dark"){ btn.textContent = "🌙 다크"; }
+    else { btn.textContent = "🌞 라이트"; }
+    localStorage.setItem(THEME_KEY, theme);
+  }
+  function toggleTheme(){
+    const cur = document.documentElement.getAttribute("data-theme") || "light";
+    applyTheme(cur==="light" ? "dark" : "light");
+  }
+  function initTheme(){
+    const saved = localStorage.getItem(THEME_KEY);
+    applyTheme(saved || "light");
+    $("#themeBtn").addEventListener("click", toggleTheme);
+  }
+
+  // ===== Utils =====
+  const pad = n => String(n).padStart(2,"0");
+  function nowISO(){ return new Date().toISOString(); }
+  function fmtKST(iso){
+    try{
+      return new Date(iso).toLocaleString("ko-KR",{ timeZone: tz, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+    }catch(e){ return iso; }
+  }
+  function fmtDeadline(task){
+    if(task.deadlineType==="ASAP") return `<span class="badge asap">ASAP</span>`;
+    if(task.deadlineType==="TODAY"){
+      const d = new Date(task.createdAt);
+      const y = d.toLocaleString("ko-KR",{timeZone:tz,year:"numeric"});
+      const m = pad(d.toLocaleString("ko-KR",{timeZone:tz,month:"2-digit"}));
+      const day = pad(d.toLocaleString("ko-KR",{timeZone:tz,day:"2-digit"}));
+      return `<span class="badge today">당일 (${y}-${m}-${day})</span>`;
+    }
+    if(task.deadlineType==="DATETIME"){
+      return `<span class="badge dt">${fmtKST(task.deadlineAt)}</span>`;
+    }
+    return "";
+  }
+  function save(){
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      tasks: state.tasks,
+      nextId: state.nextId
+    }));
+  }
+  function load(){
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    try{
+      const obj = JSON.parse(raw);
+      state.tasks = Array.isArray(obj.tasks)? obj.tasks : [];
+      state.nextId = Number.isInteger(obj.nextId)? obj.nextId : (state.tasks.reduce((m,t)=>Math.max(m,t.id),0)+1);
+    }catch(e){}
+  }
+
+  // ===== Rendering =====
+  function isComplete(t){ return !!t.authorDone && !!t.managerChecked; }
+
+  function getSortedFiltered(){
+    let arr = state.tasks.slice();
+
+    // Filter
+    if(state.statusFilter==="OPEN") arr = arr.filter(t=>!isComplete(t));
+    if(state.statusFilter==="DONE") arr = arr.filter(t=>isComplete(t));
+
+    // Sort
+    if(state.sortMode==="NEW_FIRST"){
+      arr.sort((a,b)=>b.id - a.id);
+    }else if(state.sortMode==="OLD_FIRST"){
+      arr.sort((a,b)=>a.id - b.id);
+    }else if(state.sortMode==="INCOMPLETE_FIRST"){
+      const A = arr.filter(t=>!isComplete(t)).sort((a,b)=>a.id - b.id);
+      const B = arr.filter(t=>isComplete(t)).sort((a,b)=>a.id - b.id);
+      arr = A.concat(B);
+    }else if(state.sortMode==="COMPLETE_FIRST"){
+      const A = arr.filter(t=>isComplete(t)).sort((a,b)=>a.id - b.id);
+      const B = arr.filter(t=>!isComplete(t)).sort((a,b)=>a.id - b.id);
+      arr = A.concat(B);
+    }
+    return arr;
+  }
+
+  function render(){
+    const tbody = $("#tbody");
+    tbody.innerHTML = "";
+
+    const arr = getSortedFiltered();
+    const totalPages = Math.max(1, Math.ceil(arr.length / state.pageSize));
+    if(state.page > totalPages) state.page = totalPages;
+
+    const start = (state.page - 1) * state.pageSize;
+    const pageItems = arr.slice(start, start + state.pageSize);
+
+    for(const t of pageItems){
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="hide-sm mono muted">#${t.id}</td>
+        <td class="mono nowrap">${fmtKST(t.createdAt)}</td>
+        <td class="nowrap">${escapeHtml(t.author||"")}</td>
+        <td class="content">${escapeHtml(t.content||"")}</td>
+        <td class="nowrap">${fmtDeadline(t)}</td>
+        <td class="tcenter">
+          <input type="checkbox" ${t.authorDone?"checked":""} data-act="authorDone" data-id="${t.id}">
+          ${t.authorDoneAt?`<div class="small muted">${fmtKST(t.authorDoneAt)}</div>`:""}
+        </td>
+        <td class="tcenter">
+          <input type="checkbox" ${t.managerChecked?"checked":""} data-act="managerChecked" data-id="${t.id}">
+          ${t.managerCheckedAt?`<div class="small muted">${fmtKST(t.managerCheckedAt)}</div>`:""}
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+    renderPager(totalPages);
+  }
+
+  function renderPager(totalPages){
+    const pager = $("#pager");
+    pager.innerHTML = "";
+    const mkBtn = (label, disabled, onClick)=>{
+      const b = document.createElement("button");
+      b.className = "btn";
+      b.textContent = label;
+      b.disabled = disabled;
+      b.addEventListener("click", onClick);
+      pager.appendChild(b);
+    };
+    mkBtn("« 처음", state.page===1, ()=>{ state.page=1; render(); });
+    mkBtn("‹ 이전", state.page===1, ()=>{ state.page--; render(); });
+
+    const windowSize = 5;
+    let start = Math.max(1, state.page - Math.floor(windowSize/2));
+    let end = Math.min(totalPages, start + windowSize - 1);
+    if(end - start + 1 < windowSize) start = Math.max(1, end - windowSize + 1);
+
+    for(let p=start; p<=end; p++){
+      const b = document.createElement("button");
+      b.className = "btn" + (p===state.page ? " primary":"");
+      b.textContent = p;
+      b.addEventListener("click", ()=>{ state.page=p; render(); });
+      pager.appendChild(b);
+    }
+
+    mkBtn("다음 ›", state.page===totalPages, ()=>{ state.page++; render(); });
+    mkBtn("마지막 »", state.page===totalPages, ()=>{ state.page=totalPages; render(); });
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[m]));
+  }
+
+  // ===== Events =====
+  // deadline radio toggle
+  $$('input[name="ddl"]').forEach(r=>{
+    r.addEventListener("change", ()=>{
+      const dt = $("#deadlineAt");
+      dt.disabled = (r.value!=="DATETIME");
+    });
+  });
+
+  // add task
+  $("#addBtn").addEventListener("click", ()=>{
+    const author = $("#author").value.trim();
+    const content = $("#content").value.trim();
+    const ddl = [...$$('input[name="ddl"]')].find(x=>x.checked)?.value || "ASAP";
+    const dtInput = $("#deadlineAt");
+
+    if(!author){ alert("작성자를 입력하세요."); return; }
+    if(!content){ alert("업무 내용을 입력하세요."); return; }
+    if(ddl==="DATETIME" && !dtInput.value){ alert("기한 일시를 선택하세요."); return; }
+
+    const task = {
+      id: state.nextId++,
+      createdAt: new Date().toISOString(),
+      author, content,
+      deadlineType: ddl,
+      deadlineAt: ddl==="DATETIME" ? new Date(dtInput.value).toISOString() : null,
+      authorDone: false,
+      authorDoneAt: null,
+      managerChecked: false,
+      managerCheckedAt: null
+    };
+    state.tasks.push(task);
+    save();
+
+    $("#content").value = "";
+    $$('input[name="ddl"]').forEach(x=>{ x.checked = (x.value==="ASAP"); });
+    dtInput.value = ""; dtInput.disabled = true;
+
+    state.page = 1;
+    render();
+  });
+
+  // checkbox updates
+  $("#tbody").addEventListener("change", (e)=>{
+    const t = e.target;
+    if(t.matches('input[type="checkbox"][data-id]')){
+      const id = Number(t.getAttribute("data-id"));
+      const act = t.getAttribute("data-act");
+      const item = state.tasks.find(x=>x.id===id);
+      if(!item) return;
+      if(act==="authorDone"){
+        item.authorDone = t.checked;
+        item.authorDoneAt = t.checked ? nowISO() : null;
+      }else if(act==="managerChecked"){
+        item.managerChecked = t.checked;
+        item.managerCheckedAt = t.checked ? nowISO() : null;
+      }
+      save();
+      render();
+    }
+  });
+
+  // sort & filter
+  $("#sortMode").addEventListener("change", (e)=>{ state.sortMode = e.target.value; state.page=1; render(); });
+  $("#statusFilter").addEventListener("change", (e)=>{ state.statusFilter = e.target.value; state.page=1; render(); });
+  $("#incompleteFirst").addEventListener("click", ()=>{ $("#sortMode").value="INCOMPLETE_FIRST"; state.sortMode="INCOMPLETE_FIRST"; state.page=1; render(); });
+  $("#completeFirst").addEventListener("click", ()=>{ $("#sortMode").value="COMPLETE_FIRST"; state.sortMode="COMPLETE_FIRST"; state.page=1; render(); });
+  $("#resetSort").addEventListener("click", ()=>{ $("#sortMode").value="NEW_FIRST"; state.sortMode="NEW_FIRST"; state.statusFilter="ALL"; $("#statusFilter").value="ALL"; state.page=1; render(); });
+
+  // export / import / clear
+  $("#exportBtn").addEventListener("click", ()=>{
+    const blob = new Blob([JSON.stringify({tasks:state.tasks, nextId:state.nextId}, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `assistant_tasklog_${Date.now()}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  });
+  $("#importFile").addEventListener("change", (e)=>{
+    const file = e.target.files?.[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=> {
+      try{
+        const obj = JSON.parse(reader.result);
+        if(!Array.isArray(obj.tasks)) throw new Error("형식 오류");
+        state.tasks = obj.tasks;
+        state.nextId = Number.isInteger(obj.nextId)? obj.nextId : (state.tasks.reduce((m,t)=>Math.max(m,t.id),0)+1);
+        save();
+        state.page = 1;
+        render();
+        alert("가져오기가 완료되었습니다.");
+      }catch(err){
+        alert("JSON 형식이 올바르지 않습니다.");
+      }
+    };
+    reader.readAsText(file, "utf-8");
+    e.target.value = "";
+  });
+  $("#clearBtn").addEventListener("click", ()=>{
+    if(confirm("전체 데이터를 초기화할까요? 이 작업은 되돌릴 수 없습니다.")){
+      state.tasks = [];
+      state.nextId = 1;
+      save();
+      state.page = 1;
+      render();
+    }
+  });
+
+  // ===== init =====
+  initTheme();
+  load();
+  $("#sortMode").value = state.sortMode;
+  $("#statusFilter").value = state.statusFilter;
+  render();
+})();
+</script>
+</body>
+</html>
