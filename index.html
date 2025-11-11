@@ -64,7 +64,7 @@
   .kicker{font-size:12px;color:var(--muted)}
   .hr{height:1px;background:var(--line);margin:10px 0}
   .small{font-size:12px}
-  .sticky-tools{position:sticky;bottom:14px;display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+  .sticky-tools{position:sticky;bottom:14px;display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap}
   .right{margin-left:auto}
   @media (max-width:860px){
     .hide-sm{display:none}
@@ -154,6 +154,9 @@
     <table>
       <thead>
         <tr>
+          <th class="tcenter">
+            <input type="checkbox" id="selAll" title="현재 페이지 전체 선택/해제">
+          </th>
           <th class="hide-sm">#</th>
           <th>입력시각</th>
           <th>작성자</th>
@@ -170,6 +173,7 @@
       <button id="incompleteFirst" class="btn primary">미완료 먼저</button>
       <button id="completeFirst" class="btn good">완료 먼저</button>
       <button id="resetSort" class="btn">입력순</button>
+      <button id="deleteSel" class="btn warn right" disabled>선택 삭제</button>
     </div>
   </section>
 
@@ -184,7 +188,7 @@
   const $ = sel => document.querySelector(sel);
   const $$ = sel => document.querySelectorAll(sel);
 
-  const state = { tasks: [], page:1, pageSize:10, sortMode:'NEW_FIRST', statusFilter:'ALL' };
+  const state = { tasks: [], page:1, pageSize:10, sortMode:'NEW_FIRST', statusFilter:'ALL', selected:new Set() };
 
   // ==== THEME ====
   const THEME_KEY = "assistant_tasklog_theme";
@@ -236,7 +240,6 @@
     return j.tasks;
   }
   async function apiAdd(payload){
-    // preflight 피하려고 text/plain
     const r = await fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({op:'add', ...payload}) });
     const j = await r.json();
     if(!j.ok) throw new Error('add failed');
@@ -246,6 +249,20 @@
     const r = await fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({op:'update', ...payload}) });
     const j = await r.json();
     if(!j.ok) throw new Error('update failed');
+  }
+  // ▼ 신규: 선택 삭제 (배치 삭제를 우선 시도, 단일만 지원해도 자동 폴백)
+  async function apiDelete(ids){
+    // 1) 배치 삭제 시도
+    let r = await fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({op:'delete', ids}) });
+    let j = await r.json().catch(()=>({ok:false}));
+    if(j && j.ok) return;
+
+    // 2) 폴백: 서버가 단일 id만 지원하는 경우 순차 삭제
+    for(const id of ids){
+      const r1 = await fetch(API, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({op:'delete', id}) });
+      const j1 = await r1.json();
+      if(!j1.ok) throw new Error('delete failed at id '+id);
+    }
   }
 
   // ==== State/Render ====
@@ -270,6 +287,13 @@
     return arr;
   }
 
+  function updateDeleteBtn(){
+    const n = state.selected.size;
+    const btn = $("#deleteSel");
+    btn.disabled = n===0;
+    btn.textContent = n===0 ? '선택 삭제' : `선택 삭제 (${n})`;
+  }
+
   function render(){
     const tbody = $("#tbody");
     tbody.innerHTML = "";
@@ -283,6 +307,9 @@
     for(const t of pageItems){
       const tr = document.createElement("tr");
       tr.innerHTML = `
+        <td class="tcenter">
+          <input type="checkbox" class="sel" data-id="${t.id}" ${state.selected.has(t.id)?'checked':''}>
+        </td>
         <td class="hide-sm mono muted">#${t.id}</td>
         <td class="mono nowrap">${fmtKST(t.createdAt)}</td>
         <td class="nowrap">${escapeHtml(t.author||"")}</td>
@@ -300,6 +327,12 @@
       tbody.appendChild(tr);
     }
     renderPager(totalPages);
+
+    // 현재 페이지 전체 선택 체크박스 상태 동기화
+    const pageAllChecked = pageItems.length>0 && pageItems.every(t=>state.selected.has(t.id));
+    $("#selAll").checked = pageAllChecked;
+
+    updateDeleteBtn();
   }
 
   function renderPager(totalPages){
@@ -365,20 +398,64 @@
     }
   });
 
+  // 체크박스(완료/확인) & 선택 체크박스 처리
   $("#tbody").addEventListener("change", async (e)=>{
     const t = e.target;
-    if(!t.matches('input[type="checkbox"][data-id]')) return;
-    const id = Number(t.getAttribute("data-id"));
-    const act = t.getAttribute("data-act");
-    try{
-      if(act==="authorDone"){
-        await apiUpdate({ id, authorDone: t.checked });
-      }else if(act==="managerChecked"){
-        await apiUpdate({ id, managerChecked: t.checked });
+
+    // 선택 체크박스
+    if(t.matches('input.sel[data-id]')){
+      const id = Number(t.getAttribute("data-id"));
+      if(t.checked) state.selected.add(id);
+      else state.selected.delete(id);
+      updateDeleteBtn();
+      return;
+    }
+
+    // 상태 업데이트 체크박스
+    if(t.matches('input[type="checkbox"][data-id]')){
+      const id = Number(t.getAttribute("data-id"));
+      const act = t.getAttribute("data-act");
+      if(!act) return; // 선택 체크는 위에서 처리
+      try{
+        if(act==="authorDone"){
+          await apiUpdate({ id, authorDone: t.checked });
+        }else if(act==="managerChecked"){
+          await apiUpdate({ id, managerChecked: t.checked });
+        }
+        await refresh();
+      }catch(err){
+        alert("업데이트 중 오류: " + err.message);
       }
+    }
+  });
+
+  // 현재 페이지 전체 선택/해제
+  $("#selAll").addEventListener("change", ()=>{
+    const arr = getSortedFiltered();
+    const start = (state.page - 1) * state.pageSize;
+    const pageItems = arr.slice(start, start + state.pageSize);
+    const check = $("#selAll").checked;
+    for(const t of pageItems){
+      if(check) state.selected.add(t.id);
+      else state.selected.delete(t.id);
+    }
+    render();
+  });
+
+  // 선택 삭제
+  $("#deleteSel").addEventListener("click", async ()=>{
+    const ids = Array.from(state.selected);
+    if(ids.length===0) return;
+    const msg = `선택한 ${ids.length}개 항목을 삭제할까요?\n※ 되돌릴 수 없습니다.`;
+    if(!confirm(msg)) return;
+
+    try{
+      await apiDelete(ids);
+      state.selected.clear();
       await refresh();
+      alert("삭제가 완료되었습니다.");
     }catch(err){
-      alert("업데이트 중 오류: " + err.message);
+      alert("삭제 중 오류: " + err.message + "\n(스프레드시트 권한 또는 서버 설정을 확인하세요)");
     }
   });
 
@@ -393,6 +470,9 @@
     const tasks = await apiList();
     state.tasks = tasks;
     state.page = 1;
+    // 삭제 후에도 선택 상태를 강제로 정리 (존재하지 않는 id는 제거)
+    const valid = new Set(tasks.map(t=>t.id));
+    state.selected.forEach(id=>{ if(!valid.has(id)) state.selected.delete(id); });
     render();
   }
 
